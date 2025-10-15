@@ -1,0 +1,9 @@
+.DS_Store
+*.sw[po]
+vendor
+wordpress-develop
+node_modules
+.phpunit.cache
+coverage
+
+package-lock.json

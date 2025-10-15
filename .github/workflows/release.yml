@@ -1,0 +1,88 @@
+name: Release
+permissions:
+  contents: write
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS dependencies
+        run: bun install
+
+      - name: Install internal PHP libs (Roller)
+        run: bunx roll install -y
+
+      # CHANGE: Install PHP and Composer on the runner (not in a Dockerized action)
+      # This avoids Git "dubious ownership" inside a container and lets us control git config directly.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer:v2
+
+      # CHANGE: Mark the workspace as safe for Git, since Composer will run on the host now.
+      - name: Git safe.directory
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache/files
+            vendor
+          key: composer-${{ runner.os }}-php-${{ steps.php-versions.outputs.php-version || '8.2' }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php-${{ steps.php-versions.outputs.php-version || '8.2' }}-
+
+      - name: Validate composer files
+        run: composer validate --no-check-publish
+
+      - name: Install PHP dependencies (Composer)
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - name: Build assets
+        run: bun run build
+
+      - name: Create archive
+        run: bun run archive
+
+      - name: Install pipeline
+        run: mkdir -p publish && cd publish && git clone https://github.com/tangibleinc/pipeline
+
+      - name: Add latest tag as needed
+        uses: EndBug/latest-tag@latest
+        if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Before release script
+        run: bun run publish/pipeline/before-release.ts
+
+      - name: Release tag
+        uses: softprops/action-gh-release@v2
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        with:
+          body_path: publish/release.md
+          files: publish/*.zip
+
+      - name: Release preview at latest commit
+        uses: softprops/action-gh-release@v2
+        if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+        with:
+          body_path: publish/release.md
+          files: publish/*.zip
+          tag_name: latest
+          make_latest: true
+
+      - name: After release script
+        run: bun run publish/pipeline/after-release.ts
