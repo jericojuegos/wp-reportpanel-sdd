@@ -18,6 +18,7 @@ define( 'WP_REPORTPANEL_SDD_VERSION', '0.1.1' );
 
 require __DIR__ . '/vendor/tangible/framework/index.php';
 require __DIR__ . '/vendor/tangible/updater/index.php';
+require __DIR__ . '/vendor/tangible/fields/index.php';
 
 class Plugin {
     public static $plugin;
